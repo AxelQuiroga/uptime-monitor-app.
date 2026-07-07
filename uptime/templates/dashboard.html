@@ -3,147 +3,466 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uptime Monitor</title>
+    <title>Uptime Monitor — Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
+        :root {
+            --bg-primary: #0f172a; --bg-card: #1e293b; --bg-input: #0f172a;
+            --border: #334155; --text: #e2e8f0; --text-sec: #94a3b8; --text-muted: #64748b;
+            --green: #22c55e; --green-bg: #22c55e20; --red: #ef4444; --red-bg: #ef444420;
+            --cyan: #38bdf8; --radius: 12px; --radius-sm: 8px;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 2rem; }
-        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #38bdf8; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1rem; }
-        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem; }
-        .card.up { border-left: 4px solid #22c55e; }
-        .card.down { border-left: 4px solid #ef4444; }
-        .card h2 { font-size: 1.1rem; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
-        .card .url { color: #94a3b8; font-size: 0.85rem; word-break: break-all; margin-bottom: 1rem; }
-        .status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-        .status-badge.up { background: #22c55e20; color: #22c55e; border: 1px solid #22c55e40; }
-        .status-badge.down { background: #ef444420; color: #ef4444; border: 1px solid #ef444440; }
-        .stats { display: flex; gap: 1rem; margin-top: 1rem; font-size: 0.85rem; color: #94a3b8; flex-wrap: wrap; }
-        .stats span { display: flex; align-items: center; gap: 0.35rem; }
-        .summary { display: flex; gap: 2rem; margin-bottom: 2rem; }
-        .summary-item { background: #1e293b; padding: 1rem 1.5rem; border-radius: 8px; text-align: center; min-width: 100px; }
-        .summary-item .number { font-size: 2rem; font-weight: 700; }
-        .summary-item .label { font-size: 0.8rem; color: #94a3b8; }
-        .summary-item .number.up { color: #22c55e; }
-        .summary-item .number.down { color: #ef4444; }
-        .error { color: #f87171; font-size: 0.8rem; margin-top: 0.5rem; }
-        .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-        .refresh-btn { background: #334155; border: 1px solid #475569; color: #e2e8f0; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
-        .refresh-btn:hover { background: #475569; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary); color: var(--text);
+            min-height: 100vh; line-height: 1.5;
+            padding: 2rem;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
 
-        /* Formulario */
-        .add-form { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; }
-        .add-form input { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 0.6rem 1rem; border-radius: 6px; font-size: 0.9rem; flex: 1; min-width: 200px; }
-        .add-form input:focus { outline: none; border-color: #38bdf8; }
-        .add-form button { background: #38bdf8; border: none; color: #0f172a; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
-        .add-form button:hover { background: #7dd3fc; }
+        .top-bar {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+        }
+        .top-bar h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+        .top-bar .nav-link {
+            color: var(--cyan); text-decoration: none; font-size: 0.85rem;
+            padding: 0.4rem 0.8rem; border: 1px solid var(--border);
+            border-radius: var(--radius-sm); transition: background 0.2s;
+        }
+        .top-bar .nav-link:hover { background: var(--bg-card); }
 
-        .delete-btn { background: none; border: 1px solid #ef444440; color: #ef4444; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
-        .delete-btn:hover { background: #ef444420; }
+        /* Summary */
+        .summary {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem; margin-bottom: 1.5rem;
+        }
+        .summary-item {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1rem 1.25rem; text-align: center;
+        }
+        .summary-item .number { font-size: 1.75rem; font-weight: 700; }
+        .summary-item .number.green { color: var(--green); }
+        .summary-item .number.red { color: var(--red); }
+        .summary-item .number.cyan { color: var(--cyan); }
+        .summary-item .label {
+            font-size: 0.75rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0.15rem;
+        }
 
-        .toast { position: fixed; bottom: 2rem; right: 2rem; background: #22c55e; color: #0f172a; padding: 1rem 1.5rem; border-radius: 8px; font-weight: 600; display: none; }
-        .toast.error { background: #ef4444; }
+        /* Form */
+        .add-form {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.25rem;
+            display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end;
+            margin-bottom: 1.5rem;
+        }
+        .add-form .field { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; min-width: 160px; }
+        .add-form .field label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .add-form input, .add-form select {
+            background: var(--bg-input); border: 1px solid var(--border);
+            color: var(--text); padding: 0.5rem 0.75rem;
+            border-radius: 6px; font-size: 0.85rem; width: 100%;
+        }
+        .add-form input:focus { outline: none; border-color: var(--cyan); }
+        .add-form button {
+            background: var(--cyan); border: none; color: #0f172a;
+            padding: 0.5rem 1rem; border-radius: 6px; font-weight: 600;
+            cursor: pointer; font-size: 0.85rem; white-space: nowrap;
+            height: 37px; align-self: flex-end;
+        }
+        .add-form button:hover { opacity: 0.9; }
+
+        /* Grid */
+        .grid { display: grid; gap: 0.75rem; margin-bottom: 2rem; }
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1rem 1.25rem;
+            display: flex; align-items: center; gap: 1rem;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .card:hover { border-color: var(--text-muted); }
+        .card.selected { border-color: var(--cyan); }
+
+        .card-indicator {
+            width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0;
+        }
+        .card-indicator.up { background: var(--green); }
+        .card-indicator.down { background: var(--red); }
+        .card-indicator.inactive { background: var(--text-muted); }
+
+        .card-info { flex: 1; min-width: 0; }
+        .card-info .name { font-weight: 600; font-size: 0.9rem; }
+        .card-info .url { color: var(--text-sec); font-size: 0.8rem; }
+        .card-info .meta {
+            display: flex; gap: 1rem; margin-top: 0.25rem;
+            font-size: 0.75rem; color: var(--text-muted);
+        }
+
+        .card-stats {
+            display: flex; align-items: center; gap: 1.5rem; flex-shrink: 0;
+        }
+        .card-stats .stat { text-align: right; }
+        .card-stats .stat .val { font-size: 0.85rem; font-weight: 600; }
+        .card-stats .stat .val.green { color: var(--green); }
+        .card-stats .stat .val.red { color: var(--red); }
+        .card-stats .stat .lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; }
+        .delete-btn {
+            background: none; border: 1px solid var(--red-bg);
+            color: var(--red); padding: 0.25rem 0.5rem; border-radius: 4px;
+            cursor: pointer; font-size: 0.75rem; flex-shrink: 0;
+        }
+        .delete-btn:hover { background: var(--red-bg); }
+
+        /* Chart panel */
+        .chart-panel {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.5rem;
+            display: none; margin-bottom: 2rem;
+        }
+        .chart-panel.visible { display: block; }
+        .chart-panel .chart-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;
+        }
+        .chart-panel .chart-header h2 { font-size: 1rem; font-weight: 600; }
+        .chart-panel .chart-controls { display: flex; gap: 0.5rem; align-items: center; }
+        .chart-panel .chart-controls button {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text-sec); padding: 0.3rem 0.7rem;
+            border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .chart-panel .chart-controls button:hover { background: var(--bg-input); color: var(--text); }
+        .chart-panel .chart-controls button.active { background: var(--cyan); border-color: var(--cyan); color: #0f172a; font-weight: 600; }
+        .chart-panel .chart-controls input[type="number"] {
+            background: var(--bg-input); border: 1px solid var(--border);
+            color: var(--text); padding: 0.3rem 0.5rem; border-radius: 6px;
+            font-size: 0.8rem; width: 60px;
+        }
+        .chart-panel canvas { max-height: 220px; }
+
+        .chart-panel .chart-stats {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem; margin-top: 1rem;
+        }
+        .chart-panel .chart-stats .s-card {
+            background: var(--bg-input); border-radius: var(--radius-sm);
+            padding: 0.75rem; text-align: center;
+        }
+        .chart-panel .chart-stats .s-card .v { font-size: 1.25rem; font-weight: 700; }
+        .chart-panel .chart-stats .s-card .v.green { color: var(--green); }
+        .chart-panel .chart-stats .s-card .v.cyan { color: var(--cyan); }
+        .chart-panel .chart-stats .s-card .l { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .chart-empty {
+            text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.85rem;
+        }
+
+        .toast {
+            position: fixed; bottom: 2rem; right: 2rem;
+            background: var(--green); color: #0f172a; padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-sm); font-weight: 600; display: none; font-size: 0.85rem;
+        }
+        .toast.error { background: var(--red); }
+
+        @media (max-width: 768px) {
+            body { padding: 1rem; }
+            .summary { grid-template-columns: repeat(2, 1fr); }
+            .card { flex-wrap: wrap; }
+            .card-stats { width: 100%; justify-content: flex-end; padding-left: 1.25rem; }
+            .chart-panel .chart-stats { grid-template-columns: repeat(2, 1fr); }
+        }
     </style>
 </head>
 <body>
-    <div class="header-bar">
-        <h1>📡 Uptime Monitor</h1>
-        <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
-    </div>
-
-    <!-- FORMULARIO para agregar targets -->
-    <div class="add-form">
-        <input type="text" id="targetName" placeholder="Nombre (ej: Google)" />
-        <input type="text" id="targetUrl" placeholder="URL (ej: https://google.com)" />
-        <input type="text" id="targetWebhook" placeholder="Webhook URL (opcional)" />
-        <button onclick="addTarget()">+ Agregar</button>
-    </div>
-
-    <div class="summary">
-        <div class="summary-item">
-            <div class="number">{{ status | length }}</div>
-            <div class="label">Total</div>
+    <div class="container">
+        <div class="top-bar">
+            <h1>Dashboard</h1>
+            <a href="/" class="nav-link">Public Status</a>
         </div>
-        <div class="summary-item">
-            <div class="number up">{{ status | selectattr("status", "equalto", "up") | list | length }}</div>
-            <div class="label">UP</div>
-        </div>
-        <div class="summary-item">
-            <div class="number down">{{ status | selectattr("status", "equalto", "down") | list | length }}</div>
-            <div class="label">DOWN</div>
-        </div>
-    </div>
 
-    <div class="grid">
-        {% for s in status %}
-        <div class="card {{ s.status }}">
-            <h2>
-                {{ s.name }}
-                <button class="delete-btn" onclick="deleteTarget({{ s.id }})">✕</button>
-            </h2>
-            <div class="url">{{ s.url }}</div>
-            <span class="status-badge {{ s.status }}">{{ s.status | upper }}</span>
-            {% if s.last_check %}
-            <div class="stats">
-                <span>📊 {{ s.last_check.status_code or "N/A" }}</span>
-                <span>⏱️ {% if s.last_check.latency_ms %}{{ "%.0f" | format(s.last_check.latency_ms) }}ms{% else %}N/A{% endif %}</span>
-                <span>🕐 {{ s.last_check.checked_at[:19] }}</span>
+        <div class="summary">
+            <div class="summary-item">
+                <div class="number cyan">{{ total }}</div>
+                <div class="label">Total</div>
             </div>
-            {% if s.last_check.error %}
-            <div class="error">⚠️ {{ s.last_check.error }}</div>
-            {% endif %}
-            {% else %}
-            <div class="stats"><span>⏳ Waiting for first check...</span></div>
-            {% endif %}
+            <div class="summary-item">
+                <div class="number green">{{ up_count }}</div>
+                <div class="label">UP</div>
+            </div>
+            <div class="summary-item">
+                <div class="number red">{{ down_count }}</div>
+                <div class="label">DOWN</div>
+            </div>
+            <div class="summary-item">
+                <div class="number cyan">{{ status | length }}</div>
+                <div class="label">Active</div>
+            </div>
         </div>
-        {% endfor %}
-    </div>
 
-    <div id="toast" class="toast"></div>
+        <div class="add-form">
+            <div class="field">
+                <label>Name</label>
+                <input type="text" id="targetName" placeholder="Google" />
+            </div>
+            <div class="field">
+                <label>URL</label>
+                <input type="text" id="targetUrl" placeholder="https://google.com" />
+            </div>
+            <div class="field">
+                <label>Webhook (optional)</label>
+                <input type="text" id="targetWebhook" placeholder="https://hooks.example.com" />
+            </div>
+            <button onclick="addTarget()">+ Add</button>
+        </div>
+
+        <div class="grid">
+        {% for s in status %}
+            <div class="card" data-id="{{ s.id }}" onclick="selectTarget({{ s.id }})">
+                <div class="card-indicator {{ 'inactive' if not s.is_active else s.status }}"></div>
+                <div class="card-info">
+                    <div class="name">{{ s.name }}</div>
+                    <div class="url">{{ s.url }}</div>
+                    <div class="meta">
+                        {% if s.last_check %}
+                        <span>{{ s.last_check.checked_at[:19] }}</span>
+                        <span>Interval: {{ s.interval_seconds }}s</span>
+                        {% else %}
+                        <span>No checks yet</span>
+                        {% endif %}
+                        {% if s.webhook_url %}<span>Webhook: yes</span>{% endif %}
+                    </div>
+                </div>
+                <div class="card-stats">
+                    {% if s.last_check %}
+                    <div class="stat">
+                        <div class="val">{{ s.last_check.status_code or 'ERR' }}</div>
+                        <div class="lbl">Code</div>
+                    </div>
+                    <div class="stat">
+                        <div class="val">{{ "%.0f" | format(s.last_check.latency_ms) if s.last_check.latency_ms else 'N/A' }}</div>
+                        <div class="lbl">ms</div>
+                    </div>
+                    {% endif %}
+                    <div class="stat">
+                        <span class="val {{ s.status }}">{{ s.status | upper }}</span>
+                        <div class="lbl">{{ s.status }}</div>
+                    </div>
+                </div>
+                <button class="delete-btn" onclick="event.stopPropagation(); deleteTarget({{ s.id }})">Remove</button>
+            </div>
+        {% else %}
+            <div class="chart-empty">No targets configured. Add one above.</div>
+        {% endfor %}
+        </div>
+
+        <!-- Chart panel -->
+        <div class="chart-panel" id="chartPanel">
+            <div class="chart-header">
+                <h2 id="chartTitle">Select a target</h2>
+                <div class="chart-controls">
+                    <button data-days="7">7d</button>
+                    <button data-days="30" class="active">30d</button>
+                    <button data-days="90">90d</button>
+                    <input type="number" id="customDays" value="" placeholder="days" min="1" max="90" style="width:50px;" />
+                </div>
+            </div>
+            <canvas id="detailChart"></canvas>
+            <div class="chart-stats" id="chartStats">
+                <div class="s-card"><div class="v cyan" id="csUptime">--%</div><div class="l">Uptime</div></div>
+                <div class="s-card"><div class="v cyan" id="csAvg">--ms</div><div class="l">Avg Latency</div></div>
+                <div class="s-card"><div class="v" id="csPeak" style="color:var(--text-sec)">--ms</div><div class="l">Peak</div></div>
+                <div class="s-card"><div class="v cyan" id="csChecks">--</div><div class="l">Checks</div></div>
+            </div>
+        </div>
+
+        <div id="toast" class="toast"></div>
+    </div>
 
     <script>
-        async function addTarget() {
-            const name = document.getElementById("targetName").value;
-            const url = document.getElementById("targetUrl").value;
-            const webhook = document.getElementById("targetWebhook").value;
-            if (!name || !url) { showToast("Name and URL are required", true); return; }
+        let chart = null;
+        let selectedTarget = null;
+        let currentDays = 30;
 
+        // ── Chart date toggles ──
+        document.querySelectorAll('.chart-controls button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.chart-controls button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentDays = parseInt(btn.dataset.days);
+                document.getElementById('customDays').value = '';
+                if (selectedTarget) loadChart(selectedTarget, currentDays);
+            });
+        });
+        document.getElementById('customDays').addEventListener('change', function() {
+            const days = parseInt(this.value);
+            if (days && days > 0 && days <= 90) {
+                document.querySelectorAll('.chart-controls button').forEach(b => b.classList.remove('active'));
+                currentDays = days;
+                if (selectedTarget) loadChart(selectedTarget, currentDays);
+            }
+        });
+
+        // ── Select target ──
+        function selectTarget(id) {
+            selectedTarget = id;
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+            const card = document.querySelector(`.card[data-id="${id}"]`);
+            if (card) card.classList.add('selected');
+            document.getElementById('chartTitle').textContent = card ? card.querySelector('.name').textContent : 'Target';
+            document.getElementById('chartPanel').classList.add('visible');
+            loadChart(id, currentDays);
+        }
+
+        function loadChart(id, days) {
+            fetch(`/api/public/report/${id}?days=${days}`)
+                .then(r => r.json())
+                .then(data => {
+                    updateStats(data);
+                    updateChart(data);
+                })
+                .catch(() => {});
+        }
+
+        function updateStats(data) {
+            document.getElementById('csUptime').textContent = data.uptime_pct.toFixed(2) + '%';
+            document.getElementById('csAvg').textContent = data.avg_latency_ms.toFixed(0) + 'ms';
+            document.getElementById('csPeak').textContent = data.max_latency_ms.toFixed(0) + 'ms';
+            document.getElementById('csChecks').textContent = data.total_checks;
+        }
+
+        function updateChart(data) {
+            const ctx = document.getElementById('detailChart').getContext('2d');
+            const labels = (data.timeline || []).map(t => new Date(t.bucket));
+            const avgLat = (data.timeline || []).map(t => t.avg_latency_ms);
+            const maxLat = (data.timeline || []).map(t => t.max_latency_ms);
+            const uptimePct = (data.timeline || []).map(t => t.uptime_pct);
+
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = avgLat;
+                chart.data.datasets[1].data = maxLat;
+                chart.data.datasets[2].data = uptimePct;
+                chart.update();
+                return;
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Avg latency (ms)',
+                            data: avgLat,
+                            borderColor: '#38bdf8',
+                            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                            fill: true, tension: 0.3,
+                            pointRadius: 2, pointHoverRadius: 5,
+                            borderWidth: 2, yAxisID: 'y',
+                        },
+                        {
+                            label: 'Peak (ms)',
+                            data: maxLat,
+                            borderColor: '#64748b',
+                            borderDash: [4, 4],
+                            tension: 0.3, pointRadius: 0,
+                            borderWidth: 1, yAxisID: 'y',
+                        },
+                        {
+                            label: 'Uptime %',
+                            data: uptimePct,
+                            borderColor: '#22c55e',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            fill: true, tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 1.5, yAxisID: 'y1',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#94a3b8', boxWidth: 12, boxHeight: 2, padding: 16, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            backgroundColor: '#0f172a', borderColor: '#334155', borderWidth: 1,
+                            titleColor: '#e2e8f0', bodyColor: '#94a3b8', padding: 10, cornerRadius: 8,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                tooltipFormat: 'MMM d, HH:mm',
+                                displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' }
+                            },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#475569', maxTicksLimit: 8 }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            position: 'left',
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#475569', callback: v => v + 'ms' },
+                            title: { display: true, text: 'Latency (ms)', color: '#64748b' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            max: 100,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#475569', callback: v => v + '%' },
+                            title: { display: true, text: 'Uptime %', color: '#64748b' }
+                        }
+                    },
+                    interaction: { intersect: false, mode: 'index' }
+                }
+            });
+        }
+
+        // ── CRUD ──
+        async function addTarget() {
+            const name = document.getElementById('targetName').value.trim();
+            const url = document.getElementById('targetUrl').value.trim();
+            const webhook = document.getElementById('targetWebhook').value.trim();
+            if (!name || !url) { showToast('Name and URL are required', true); return; }
             const body = { name, url };
             if (webhook) body.webhook_url = webhook;
-
-            const resp = await fetch("/api/targets", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+            const resp = await fetch('/api/targets', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
             if (resp.ok) {
-                showToast("Target added!");
-                document.getElementById("targetName").value = "";
-                document.getElementById("targetUrl").value = "";
-                document.getElementById("targetWebhook").value = "";
-                setTimeout(() => location.reload(), 1000);
+                showToast('Target added!');
+                setTimeout(() => location.reload(), 800);
             } else {
                 const data = await resp.json();
-                showToast(data.error || "Error", true);
+                showToast(data.error || 'Error', true);
             }
         }
 
         async function deleteTarget(id) {
-            if (!confirm("Delete this target?")) return;
-            const resp = await fetch("/api/targets/" + id, { method: "DELETE" });
+            if (!confirm('Delete this target and all its data?')) return;
+            const resp = await fetch('/api/targets/' + id, { method: 'DELETE' });
             if (resp.ok) {
-                showToast("Target deleted");
-                setTimeout(() => location.reload(), 1000);
+                showToast('Target deleted');
+                setTimeout(() => location.reload(), 800);
             } else {
-                showToast("Error deleting", true);
+                showToast('Error deleting', true);
             }
         }
 
         function showToast(msg, isError) {
-            const t = document.getElementById("toast");
+            const t = document.getElementById('toast');
             t.textContent = msg;
-            t.className = "toast" + (isError ? " error" : "");
-            t.style.display = "block";
-            setTimeout(() => t.style.display = "none", 3000);
+            t.className = 'toast' + (isError ? ' error' : '');
+            t.style.display = 'block';
+            setTimeout(() => t.style.display = 'none', 3000);
         }
     </script>
 </body>

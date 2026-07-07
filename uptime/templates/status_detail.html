@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ target.name }} — Status</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #060b1a;
+            --bg-card: #0f172a;
+            --bg-card-hover: #141e36;
+            --border-subtle: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #64748b;
+            --text-muted: #475569;
+            --accent-green: #22c55e;
+            --accent-green-glow: rgba(34, 197, 94, 0.15);
+            --accent-red: #ef4444;
+            --accent-cyan: #06b6d4;
+            --accent-cyan-glow: rgba(6, 182, 212, 0.15);
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 20% 50%, rgba(6, 182, 212, 0.03) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 50%, rgba(34, 197, 94, 0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        a.back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            margin-bottom: 2rem;
+            transition: color 0.2s;
+        }
+        a.back:hover { color: var(--text-primary); }
+        a.back::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-left: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+        }
+
+        /* Target header */
+        .target-header {
+            margin-bottom: 2rem;
+        }
+        .target-header .name-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.25rem;
+        }
+        .target-header .name-row h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .status-dot.up { background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green-glow); }
+        .status-dot.down { background: var(--accent-red); animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .target-header .url {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            word-break: break-all;
+        }
+
+        /* Stats row */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        .stat-card .value.green { color: var(--accent-green); }
+        .stat-card .value.red { color: var(--accent-red); }
+        .stat-card .value.cyan { color: var(--accent-cyan); }
+        .stat-card .label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-top: 0.25rem;
+        }
+
+        /* Chart card */
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-card .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .chart-card .chart-header h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .chart-card canvas {
+            max-height: 250px;
+        }
+
+        /* Date toggles */
+        .date-toggles {
+            display: flex;
+            gap: 0.35rem;
+        }
+        .date-toggles button {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .date-toggles button:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+        .date-toggles button.active {
+            background: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+            color: #060b1a;
+            font-weight: 600;
+        }
+
+        /* Check list */
+        .checks-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+        }
+        .checks-section h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .check-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.85rem;
+        }
+        .check-row:last-child { border-bottom: none; }
+        .check-row .check-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .check-row .check-dot.up { background: var(--accent-green); }
+        .check-row .check-dot.down { background: var(--accent-red); }
+        .check-row .check-code {
+            color: var(--text-secondary);
+            width: 3rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .check-row .check-latency {
+            color: var(--text-muted);
+            width: 5rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .check-row .check-time {
+            color: var(--text-muted);
+            margin-left: auto;
+            font-size: 0.8rem;
+        }
+        .check-row .check-error {
+            color: var(--accent-red);
+            font-size: 0.8rem;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .empty-chart {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 640px) {
+            .container { padding: 1.5rem 1rem; }
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            .stat-card .value { font-size: 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back">All services</a>
+
+        <div class="target-header">
+            <div class="name-row">
+                <span class="status-dot {{ status }}"></span>
+                <h1>{{ target.name }}</h1>
+            </div>
+            <div class="url">{{ target.url }}</div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="value cyan" id="statUptime">--%</div>
+                <div class="label">Uptime</div>
+            </div>
+            <div class="stat-card">
+                <div class="value cyan" id="statAvgLatency">--ms</div>
+                <div class="label">Avg Latency</div>
+            </div>
+            <div class="stat-card">
+                <div class="value cyan" id="statMaxLatency">--ms</div>
+                <div class="label">Peak</div>
+            </div>
+            <div class="stat-card">
+                <div class="value cyan" id="statChecks">--</div>
+                <div class="label">Checks</div>
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-header">
+                <h2>Latency over time</h2>
+                <div class="date-toggles">
+                    <button data-days="7">7d</button>
+                    <button data-days="30" class="active">30d</button>
+                    <button data-days="90">90d</button>
+                </div>
+            </div>
+            <canvas id="latencyChart"></canvas>
+        </div>
+
+        <div class="checks-section">
+            <h2>Recent checks</h2>
+            <div id="checksList">
+                <div class="empty-chart">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const targetId = {{ target.id }};
+        let chart = null;
+        let currentDays = 30;
+
+        // Date toggles
+        document.querySelectorAll('.date-toggles button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.date-toggles button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentDays = parseInt(btn.dataset.days);
+                loadData(currentDays);
+            });
+        });
+
+        function loadData(days) {
+            fetch(`/api/public/report/${targetId}?days=${days}`)
+                .then(r => r.json())
+                .then(data => {
+                    updateStats(data);
+                    updateChart(data);
+                    updateChecks(data);
+                })
+                .catch(err => {
+                    console.error('Failed to load report data:', err);
+                });
+        }
+
+        function updateStats(data) {
+            document.getElementById('statUptime').textContent = data.uptime_pct.toFixed(2) + '%';
+            document.getElementById('statAvgLatency').textContent = data.avg_latency_ms.toFixed(0) + 'ms';
+            document.getElementById('statMaxLatency').textContent = data.max_latency_ms.toFixed(0) + 'ms';
+            document.getElementById('statChecks').textContent = data.total_checks;
+        }
+
+        function updateChart(data) {
+            const ctx = document.getElementById('latencyChart').getContext('2d');
+            const labels = data.timeline.map(t => new Date(t.bucket));
+            const avgLatencies = data.timeline.map(t => t.avg_latency_ms);
+            const maxLatencies = data.timeline.map(t => t.max_latency_ms);
+
+            if (chart) {
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = avgLatencies;
+                chart.data.datasets[1].data = maxLatencies;
+                chart.update();
+                return;
+            }
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Avg latency',
+                            data: avgLatencies,
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.08)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 2,
+                            pointHoverRadius: 4,
+                            borderWidth: 2,
+                        },
+                        {
+                            label: 'Peak',
+                            data: maxLatencies,
+                            borderColor: '#64748b',
+                            backgroundColor: 'transparent',
+                            borderDash: [4, 4],
+                            tension: 0.3,
+                            pointRadius: 0,
+                            borderWidth: 1,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#64748b',
+                                boxWidth: 12,
+                                boxHeight: 2,
+                                padding: 16,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#0f172a',
+                            borderColor: '#1e293b',
+                            borderWidth: 1,
+                            titleColor: '#e2e8f0',
+                            bodyColor: '#94a3b8',
+                            padding: 10,
+                            cornerRadius: 8,
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                tooltipFormat: 'MMM d, HH:mm',
+                                displayFormats: {
+                                    hour: 'MMM d HH:mm',
+                                    day: 'MMM d'
+                                }
+                            },
+                            grid: { color: '#1e293b', drawTicks: false },
+                            ticks: { color: '#475569', maxRotation: 0, maxTicksLimit: 10 }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#1e293b', drawTicks: false },
+                            ticks: { color: '#475569', callback: v => v + 'ms' }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        function updateChecks(data) {
+            const container = document.getElementById('checksList');
+            if (!data.recent_checks || data.recent_checks.length === 0) {
+                container.innerHTML = '<div class="empty-chart">No checks yet.</div>';
+                return;
+            }
+            container.innerHTML = data.recent_checks.map(c => `
+                <div class="check-row">
+                    <span class="check-dot ${c.is_up ? 'up' : 'down'}"></span>
+                    <span class="check-code">${c.status_code || 'ERR'}</span>
+                    <span class="check-latency">${c.latency_ms ? c.latency_ms.toFixed(0) + 'ms' : 'N/A'}</span>
+                    ${c.error ? `<span class="check-error">${c.error}</span>` : ''}
+                    <span class="check-time">${c.checked_at ? c.checked_at.slice(0, 19).replace('T', ' ') : ''}</span>
+                </div>
+            `).join('');
+        }
+
+        // Initial load
+        loadData(currentDays);
+    </script>
+</body>
+</html>

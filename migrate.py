@@ -115,6 +115,12 @@ def run_migration():
     """)
     print("[migrate] Refresh policy ready")
 
+    # 9. Backfill — populate hourly_checks with ALL existing data
+    #     Must run OUTSIDE a transaction block (CALL, not SELECT).
+    #     With ISOLATION_LEVEL_AUTOCOMMIT, each execute() is its own txn.
+    cur.execute("CALL refresh_continuous_aggregate('hourly_checks', NULL, NULL);")
+    print("[migrate] hourly_checks backfilled with existing data")
+
     cur.close()
     conn.close()
     print("[migrate] Complete!")

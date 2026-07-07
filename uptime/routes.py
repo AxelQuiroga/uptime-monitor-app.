@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import text
+from sqlalchemy import text, desc
 
 from flask import Blueprint, request, jsonify
 from .models import Target, Check, db
@@ -56,9 +56,9 @@ def get_history(target_id):
 
 @api.route("/report/<int:target_id>")
 def get_report(target_id):
-    days = request.args.get("days", 30, type=int)
+    """Aggregate report from hourly_checks. Uptime = SUM(up) / SUM(total)."""
+    days = min(request.args.get("days", 30, type=int), 90)
     target = Target.query.get_or_404(target_id)
-
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     row = db.session.execute(
@@ -66,7 +66,10 @@ def get_report(target_id):
             SELECT
                 COALESCE(SUM(total_checks), 0) AS total_checks,
                 COALESCE(SUM(up_checks), 0) AS up_checks,
-                ROUND(COALESCE(AVG(uptime_pct), 0), 2) AS uptime_pct,
+                CASE WHEN SUM(total_checks) > 0
+                    THEN ROUND(SUM(up_checks)::numeric / SUM(total_checks) * 100, 2)
+                    ELSE 0
+                END AS uptime_pct,
                 ROUND(COALESCE(AVG(avg_latency), 0), 2) AS avg_latency,
                 ROUND(COALESCE(MAX(max_latency), 0), 2) AS max_latency,
                 ROUND(COALESCE(MIN(min_latency), 0), 2) AS min_latency
@@ -82,8 +85,8 @@ def get_report(target_id):
         "target_url": target.url,
         "days": days,
         "since": since.isoformat(),
-        "total_checks": row[0],
-        "up_checks": row[1],
+        "total_checks": int(row[0]),
+        "up_checks": int(row[1]),
         "uptime_pct": float(row[2]) if row[2] else 0,
         "avg_latency_ms": float(row[3]) if row[3] else 0,
         "max_latency_ms": float(row[4]) if row[4] else 0,
@@ -93,9 +96,9 @@ def get_report(target_id):
 
 @api.route("/report/<int:target_id>/timeline")
 def get_timeline(target_id):
-    days = request.args.get("days", 7, type=int)
+    """Per-bucket timeline from hourly_checks."""
+    days = min(request.args.get("days", 7, type=int), 90)
     target = Target.query.get_or_404(target_id)
-
     since = datetime.now(timezone.utc) - timedelta(days=days)
 
     rows = db.session.execute(
@@ -104,7 +107,10 @@ def get_timeline(target_id):
                 bucket,
                 total_checks,
                 up_checks,
-                uptime_pct,
+                CASE WHEN total_checks > 0
+                    THEN ROUND(up_checks::numeric / total_checks * 100, 2)
+                    ELSE 0
+                END AS uptime_pct,
                 avg_latency,
                 max_latency,
                 min_latency
@@ -122,8 +128,8 @@ def get_timeline(target_id):
         "timeline": [
             {
                 "bucket": row[0].isoformat() if row[0] else None,
-                "total_checks": row[1],
-                "up_checks": row[2],
+                "total_checks": int(row[1]),
+                "up_checks": int(row[2]),
                 "uptime_pct": float(row[3]) if row[3] else 0,
                 "avg_latency_ms": float(row[4]) if row[4] else 0,
                 "max_latency_ms": float(row[5]) if row[5] else 0,
@@ -132,3 +138,141 @@ def get_timeline(target_id):
             for row in rows
         ]
     })
+
+
+# ─── Public API (read-only, no auth) ───────────────────────────────────────
+
+
+@api.route("/public/status")
+def public_status():
+    """Public status JSON — all active targets with current state + uptime %."""
+    targets = Target.query.filter_by(is_active=True).all()
+    result = []
+    for t in targets:
+        last_check = (
+            Check.query
+            .filter_by(target_id=t.id)
+            .order_by(Check.created_at.desc())
+            .first()
+        )
+        is_up = last_check and last_check.is_up
+        uptime_pct = _get_uptime_pct(t.id, 30)
+        result.append({
+            "id": t.id,
+            "name": t.name,
+            "url": t.url,
+            "status": "up" if is_up else "down",
+            "uptime_pct": uptime_pct,
+            "last_check": last_check.to_dict() if last_check else None,
+        })
+    return jsonify(result)
+
+
+@api.route("/public/report/<int:target_id>")
+def public_report(target_id):
+    """Public report — aggregate + timeline + recent checks, for Chart.js."""
+    days = min(request.args.get("days", 30, type=int), 90)
+    target = db.session.get(Target, target_id)
+    if not target:
+        return jsonify({"error": "target not found"}), 404
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Aggregate
+    row = db.session.execute(
+        text("""
+            SELECT
+                COALESCE(SUM(total_checks), 0) AS total_checks,
+                COALESCE(SUM(up_checks), 0) AS up_checks,
+                CASE WHEN SUM(total_checks) > 0
+                    THEN ROUND(SUM(up_checks)::numeric / SUM(total_checks) * 100, 2)
+                    ELSE 0
+                END AS uptime_pct,
+                ROUND(COALESCE(AVG(avg_latency), 0), 2) AS avg_latency,
+                ROUND(COALESCE(MAX(max_latency), 0), 2) AS max_latency,
+                ROUND(COALESCE(MIN(min_latency), 0), 2) AS min_latency
+            FROM hourly_checks
+            WHERE target_id = :tid AND bucket >= :since
+        """),
+        {"tid": target_id, "since": since}
+    ).fetchone()
+
+    return jsonify({
+        "target_id": target_id,
+        "target_name": target.name,
+        "target_url": target.url,
+        "days": days,
+        "total_checks": int(row[0]),
+        "up_checks": int(row[1]),
+        "uptime_pct": float(row[2]) if row[2] else 0,
+        "avg_latency_ms": float(row[3]) if row[3] else 0,
+        "max_latency_ms": float(row[4]) if row[4] else 0,
+        "min_latency_ms": float(row[5]) if row[5] else 0,
+        "timeline": _get_timeline_data(target_id, since),
+        "recent_checks": _get_recent_checks(target_id, 20),
+    })
+
+
+def _get_uptime_pct(target_id: int, days: int = 30) -> float:
+    """Helper: uptime % from hourly_checks (fallback 0 on error)."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        row = db.session.execute(
+            text("""
+                SELECT
+                    CASE WHEN SUM(total_checks) > 0
+                        THEN ROUND(SUM(up_checks)::numeric / SUM(total_checks) * 100, 2)
+                        ELSE 0
+                    END AS uptime_pct
+                FROM hourly_checks
+                WHERE target_id = :tid AND bucket >= :since
+            """),
+            {"tid": target_id, "since": since}
+        ).fetchone()
+        return float(row[0]) if row and row[0] else 0.0
+    except Exception:
+        return 0.0
+
+
+def _get_timeline_data(target_id: int, since: datetime) -> list:
+    """Helper: per-bucket timeline for Chart.js (epoch millis for x-axis)."""
+    try:
+        rows = db.session.execute(
+            text("""
+                SELECT
+                    bucket,
+                    CASE WHEN total_checks > 0
+                        THEN ROUND(up_checks::numeric / total_checks * 100, 2)
+                        ELSE 0
+                    END AS uptime_pct,
+                    avg_latency,
+                    max_latency
+                FROM hourly_checks
+                WHERE target_id = :tid AND bucket >= :since
+                ORDER BY bucket ASC
+            """),
+            {"tid": target_id, "since": since}
+        ).fetchall()
+        return [
+            {
+                "bucket": int(row[0].timestamp() * 1000),  # epoch millis for Chart.js
+                "uptime_pct": float(row[1]) if row[1] else 0,
+                "avg_latency_ms": float(row[2]) if row[2] else 0,
+                "max_latency_ms": float(row[3]) if row[3] else 0,
+            }
+            for row in rows
+        ]
+    except Exception:
+        return []
+
+
+def _get_recent_checks(target_id: int, limit: int = 20) -> list:
+    """Helper: last N raw checks."""
+    checks = (
+        Check.query
+        .filter_by(target_id=target_id)
+        .order_by(Check.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [c.to_dict() for c in checks]

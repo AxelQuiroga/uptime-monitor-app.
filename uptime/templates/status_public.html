@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Status</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #060b1a;
+            --bg-card: #0f172a;
+            --bg-card-hover: #141e36;
+            --border-subtle: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #64748b;
+            --text-muted: #475569;
+            --accent-green: #22c55e;
+            --accent-green-glow: rgba(34, 197, 94, 0.15);
+            --accent-red: #ef4444;
+            --accent-red-glow: rgba(239, 68, 68, 0.15);
+            --accent-cyan: #06b6d4;
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* Abstract background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 20% 50%, rgba(6, 182, 212, 0.03) 0%, transparent 50%),
+                        radial-gradient(ellipse at 80% 20%, rgba(34, 197, 94, 0.02) 0%, transparent 50%),
+                        radial-gradient(ellipse at 50% 80%, rgba(239, 68, 68, 0.02) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header */
+        .header { margin-bottom: 2.5rem; }
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+        .header .subtitle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Status dot */
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+        .status-dot.up {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px var(--accent-green-glow);
+        }
+        .status-dot.down {
+            background: var(--accent-red);
+            box-shadow: 0 0 8px var(--accent-red-glow);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Summary bar */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            text-align: center;
+        }
+        .summary-card .number {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+        }
+        .summary-card .number.green { color: var(--accent-green); }
+        .summary-card .number.red { color: var(--accent-red); }
+        .summary-card .label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-top: 0.25rem;
+        }
+
+        /* Target grid */
+        .grid {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.2s, border-color 0.2s, transform 0.15s;
+            cursor: pointer;
+        }
+        .card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--text-muted);
+            transform: translateY(-1px);
+        }
+
+        .card-indicator {
+            width: 4px;
+            height: 40px;
+            border-radius: 2px;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        .card-indicator.up { background: var(--accent-green); }
+        .card-indicator.down { background: var(--accent-red); }
+
+        .card-info { flex: 1; min-width: 0; }
+        .card-info .name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.15rem;
+        }
+        .card-info .url {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .card-meta {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            flex-shrink: 0;
+        }
+        .card-meta .stat {
+            text-align: right;
+        }
+        .card-meta .stat .value {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .card-meta .stat .value.green { color: var(--accent-green); }
+        .card-meta .stat .value.red { color: var(--accent-red); }
+        .card-meta .stat .label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card-meta .latency {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        .card-meta .time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .empty {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+        }
+
+        /* Auto-refresh indicator */
+        .refresh-indicator {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            opacity: 0.8;
+        }
+        .refresh-indicator .spinner {
+            width: 10px;
+            height: 10px;
+            border: 2px solid var(--border-subtle);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .container { padding: 1.5rem 1rem; }
+            .summary { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+            .summary-card { padding: 1rem; }
+            .summary-card .number { font-size: 1.5rem; }
+            .card { flex-wrap: wrap; }
+            .card-meta { width: 100%; justify-content: flex-end; padding-left: 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>System Status</h1>
+            <div class="subtitle">
+                {% if down_count == 0 %}
+                <span class="status-dot up"></span> All systems operational
+                {% else %}
+                <span class="status-dot down"></span> {{ down_count }} service{% if down_count != 1 %}s{% endif %} experiencing issues
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="summary">
+            <div class="summary-card">
+                <div class="number">{{ total }}</div>
+                <div class="label">Services</div>
+            </div>
+            <div class="summary-card">
+                <div class="number green">{{ up_count }}</div>
+                <div class="label">Operational</div>
+            </div>
+            <div class="summary-card">
+                <div class="number red">{{ down_count }}</div>
+                <div class="label">Degraded</div>
+            </div>
+        </div>
+
+        {% if status %}
+        <div class="grid">
+            {% for s in status %}
+            <a href="/target/{{ s.id }}" class="card">
+                <div class="card-indicator {{ s.status }}"></div>
+                <div class="card-info">
+                    <div class="name">{{ s.name }}</div>
+                    <div class="url">{{ s.url }}</div>
+                </div>
+                <div class="card-meta">
+                    <div class="stat">
+                        <div class="value {{ s.status }}">{{ "%.2f" | format(s.uptime_pct) }}%</div>
+                        <div class="label">Uptime</div>
+                    </div>
+                    {% if s.last_check %}
+                    <div class="latency">{{ "%.0f" | format(s.last_check.latency_ms) }}ms</div>
+                    <div class="time">{{ s.last_check.checked_at[:10] }}</div>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <p>No services configured yet.</p>
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <span>Updated in real-time</span>
+        </div>
+    </div>
+
+    <div class="refresh-indicator">
+        <div class="spinner"></div>
+        <span>Auto-refreshing</span>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        let refreshTimer = setTimeout(function refresh() {
+            fetch(window.location.href, { headers: { 'Accept': 'text/html' } })
+                .then(r => r.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    document.querySelector('.grid').innerHTML = doc.querySelector('.grid').innerHTML;
+                    document.querySelector('.summary').innerHTML = doc.querySelector('.summary').innerHTML;
+                    const subtitle = doc.querySelector('.subtitle');
+                    if (subtitle) document.querySelector('.subtitle').innerHTML = subtitle.innerHTML;
+                })
+                .catch(() => {});
+            refreshTimer = setTimeout(refresh, 30000);
+        }, 30000);
+    </script>
+</body>
+</html>
