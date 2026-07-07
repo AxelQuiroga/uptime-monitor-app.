@@ -1,8 +1,8 @@
-"""Tests for the worker module."""
-from unittest.mock import MagicMock, ANY
+"""Tests for the check_job worker function."""
+from unittest.mock import MagicMock
 
 import pytest
-from worker import check_job
+from uptime.jobs import check_job
 
 
 class TestCheckJob:
@@ -19,14 +19,13 @@ class TestCheckJob:
         mock_result.is_up = True
         mock_result.latency_ms = 100.0
 
-        monkeypatch.setattr("worker.db.session.get", lambda model, tid: target if tid == 1 else None)
-        monkeypatch.setattr("worker.check_url", lambda t: mock_result)
+        monkeypatch.setattr("uptime.jobs.db.session.get", lambda model, tid: target if tid == 1 else None)
+        monkeypatch.setattr("uptime.jobs.check_url", lambda t: mock_result)
 
-        # Mock create_app to provide a working app context
         mock_app = MagicMock()
         mock_app.app_context.return_value.__enter__.return_value = None
         mock_app.app_context.return_value.__exit__.return_value = None
-        monkeypatch.setattr("worker.create_app", lambda: mock_app)
+        monkeypatch.setattr("uptime.jobs.create_app", lambda: mock_app)
 
         result = check_job(1)
 
@@ -40,13 +39,13 @@ class TestCheckJob:
         target.url = "https://example.com"
 
         mock_check_url = MagicMock()
-        monkeypatch.setattr("worker.check_url", mock_check_url)
-        monkeypatch.setattr("worker.db.session.get", lambda model, tid: target if tid == 2 else None)
+        monkeypatch.setattr("uptime.jobs.check_url", mock_check_url)
+        monkeypatch.setattr("uptime.jobs.db.session.get", lambda model, tid: target if tid == 2 else None)
 
         mock_app = MagicMock()
         mock_app.app_context.return_value.__enter__.return_value = None
         mock_app.app_context.return_value.__exit__.return_value = None
-        monkeypatch.setattr("worker.create_app", lambda: mock_app)
+        monkeypatch.setattr("uptime.jobs.create_app", lambda: mock_app)
 
         result = check_job(2)
 
@@ -56,13 +55,13 @@ class TestCheckJob:
     def test_check_job_not_found(self, monkeypatch):
         """Missing target → skips, no crash."""
         mock_check_url = MagicMock()
-        monkeypatch.setattr("worker.check_url", mock_check_url)
-        monkeypatch.setattr("worker.db.session.get", lambda model, tid: None)
+        monkeypatch.setattr("uptime.jobs.check_url", mock_check_url)
+        monkeypatch.setattr("uptime.jobs.db.session.get", lambda model, tid: None)
 
         mock_app = MagicMock()
         mock_app.app_context.return_value.__enter__.return_value = None
         mock_app.app_context.return_value.__exit__.return_value = None
-        monkeypatch.setattr("worker.create_app", lambda: mock_app)
+        monkeypatch.setattr("uptime.jobs.create_app", lambda: mock_app)
 
         result = check_job(999)
 

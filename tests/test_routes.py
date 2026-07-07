@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from uptime.models import Target, Check
 
 
@@ -204,3 +205,47 @@ class TestHistoryRoutes:
         resp = client.get(f"/api/history/{t.id}")
         assert resp.status_code == 200
         assert len(resp.json) == 20
+
+
+class TestReportRoutes:
+    """Tests for /api/report/<id> and /api/report/<id>/timeline endpoints."""
+
+    def test_report_endpoint(self, client, target, session):
+        """GET /api/report/<id> returns 200 with report structure."""
+        mock_row = MagicMock()
+        mock_row.__getitem__.side_effect = lambda idx: [10, 9, 90.0, 150.0, 500.0, 50.0][idx]
+
+        with patch('uptime.routes.db.session.execute') as mock_exec:
+            mock_exec.return_value.fetchone.return_value = mock_row
+            resp = client.get(f"/api/report/{target.id}")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["uptime_pct"] == 90.0
+            assert data["total_checks"] == 10
+            assert data["target_id"] == target.id
+            assert data["target_name"] == "Test"
+
+    def test_report_timeline_endpoint(self, client, target, session):
+        """GET /api/report/<id>/timeline returns timeline array."""
+        from datetime import datetime, timezone
+        mock_bucket = datetime.now(timezone.utc)
+        mock_row = MagicMock()
+        mock_row.__getitem__.side_effect = lambda idx: [
+            mock_bucket, 10, 9, 90.0, 150.0, 500.0, 50.0
+        ][idx]
+
+        with patch('uptime.routes.db.session.execute') as mock_exec:
+            mock_exec.return_value.fetchall.return_value = [mock_row]
+            resp = client.get(f"/api/report/{target.id}/timeline?days=7")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "timeline" in data
+            assert len(data["timeline"]) == 1
+            assert data["timeline"][0]["uptime_pct"] == 90.0
+            assert data["timeline"][0]["total_checks"] == 10
+            assert data["target_id"] == target.id
+
+    def test_report_not_found(self, client):
+        """GET /api/report/9999 returns 404."""
+        resp = client.get("/api/report/9999")
+        assert resp.status_code == 404

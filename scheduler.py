@@ -39,7 +39,7 @@ def get_due_targets():
 def enqueue_checks(targets):
     for target in targets:
         check_queue.enqueue(
-            "uptime.worker.check_job",
+            "uptime.jobs.check_job",
             target.id,
             job_timeout=target.interval_seconds,
             description=f"check:{target.id}:{target.url}"

@@ -111,7 +111,7 @@ class TestEnqueueChecks:
         enqueue_checks([target])
 
         mock_enqueue.assert_called_once_with(
-            "uptime.worker.check_job", 1,
+            "uptime.jobs.check_job", 1,
             job_timeout=30,
             description="check:1:https://example.com",
         )
@@ -134,7 +134,7 @@ class TestEnqueueChecks:
         assert mock_enqueue.call_count == 3
         for i in range(3):
             args, kwargs = mock_enqueue.call_args_list[i]
-            assert args[0] == "uptime.worker.check_job"
+            assert args[0] == "uptime.jobs.check_job"
             assert args[1] == i + 1
             assert kwargs["job_timeout"] == 30
             assert kwargs["description"] == f"check:{i + 1}:https://example{i}.com"
