@@ -3,3 +3,5 @@ flask-sqlalchemy==3.1.1
 psycopg2-binary==2.9.9
 requests==2.31.0
 apscheduler==3.10.4
+rq>=1.16,<3
+redis>=5.0,<6

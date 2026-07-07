@@ -6,36 +6,66 @@ services:
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgresql://admin:secret123@db:5432/devopsdb
-      - FLASK_DEBUG=1
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - FLASK_DEBUG=${FLASK_DEBUG:-1}
+      - PYTHONUNBUFFERED=1
     depends_on:
       db:
         condition: service_healthy
     command: python server.py
 
-  checker:
+  scheduler:
     build: .
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgresql://admin:secret123@db:5432/devopsdb
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
     depends_on:
       db:
         condition: service_healthy
-    command: python runner.py
+      redis:
+        condition: service_healthy
+    command: python scheduler.py
+
+  worker:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python worker.py
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=devopsdb
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=secret123
+      - POSTGRES_DB=${DB_NAME:-devopsdb}
+      - POSTGRES_USER=${DB_USER:-admin}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-secret123}
     ports:
       - "5432:5432"
     volumes:
       - uptime-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d devopsdb"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d ${DB_NAME:-devopsdb}"]
       interval: 5s
       timeout: 5s
       retries: 5

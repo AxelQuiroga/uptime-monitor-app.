@@ -6,12 +6,17 @@ from .notifier import send_alert
 def check_url(target):
     start = time.time()
     # Buscamos el último check ANTES de hacer el nuevo (para detectar cambios)
-    last_check = Check.query.filter_by(target_id=target.id).first()
+    last_check = (
+        Check.query
+        .filter_by(target_id=target.id)
+        .order_by(Check.created_at.desc())
+        .first()
+    )
 
     try:
         resp = requests.get(target.url, timeout=10, allow_redirects=True)
         latency = (time.time() - start) * 1000
-        is_up = 200 <= resp.status_code < 500
+        is_up = 200 <= resp.status_code < 400
         check = Check(target_id=target.id, status_code=resp.status_code, latency_ms=latency, is_up=is_up)
     except requests.ConnectionError:
         check = Check(target_id=target.id, status_code=None, latency_ms=None, is_up=False, error_message="Connection failed")
@@ -24,7 +29,7 @@ def check_url(target):
     db.session.commit()
 
     # Notificar si cambió el estado
-    previous_up = last_check.is_up if last_check else True  # asumimos UP si no hay historial
+    previous_up = last_check.is_up if last_check else None  # None = primera vez, no sabemos estado anterior
     if previous_up != check.is_up:
         send_alert(target, check, previous_up)
 
