@@ -295,7 +295,7 @@
                         <div class="label">Uptime</div>
                     </div>
                     {% if s.last_check %}
-                    <div class="latency">{{ "%.0f" | format(s.last_check.latency_ms) }}ms</div>
+                    <div class="latency">{% if s.last_check.latency_ms is not none %}{{ "%.0f" | format(s.last_check.latency_ms) }}ms{% else %}N/A{% endif %}</div>
                     <div class="time">{{ s.last_check.checked_at[:10] }}</div>
                     {% endif %}
                 </div>

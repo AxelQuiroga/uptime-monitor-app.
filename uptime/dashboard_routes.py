@@ -4,12 +4,14 @@ Serves:
   /        → Dashboard overview (manage targets + see status)
 """
 from flask import Blueprint, render_template
+from flask_login import login_required
 from .models import Target, Check, AlertChannel
 
 dashboard = Blueprint("dashboard", __name__)
 
 
 @dashboard.route("/")
+@login_required
 def index():
     """Dashboard — full control panel with charts and management."""
     targets = Target.query.all()

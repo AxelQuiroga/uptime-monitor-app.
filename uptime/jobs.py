@@ -7,10 +7,20 @@ from uptime.app import create_app
 from uptime.models import Target, db
 from uptime.checker import check_url
 
+_app = None
+
+
+def _get_app():
+    """Lazy singleton: create Flask app once, reuse for all jobs."""
+    global _app
+    if _app is None:
+        _app = create_app()
+    return _app
+
 
 def check_job(target_id: int):
     """Check a single target by ID. Runs inside an RQ worker."""
-    app = create_app()
+    app = _get_app()
     with app.app_context():
         target = db.session.get(Target, target_id)
         if not target:

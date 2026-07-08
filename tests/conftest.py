@@ -8,10 +8,10 @@ from uptime.models import Target
 def app(monkeypatch):
     """Create a Flask app with in-memory SQLite database."""
     monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("ADMIN_PASSWORD", "testpass")
+    monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-pytest-1234567890")
     app = create_app()
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-
     with app.app_context():
         db.create_all()
 
@@ -25,8 +25,10 @@ def app(monkeypatch):
 
 @pytest.fixture
 def client(app):
-    """Test client for the Flask app."""
-    return app.test_client()
+    """Test client for the Flask app (pre-authenticated)."""
+    c = app.test_client()
+    c.post("/login", data={"password": "testpass"})
+    return c
 
 
 @pytest.fixture

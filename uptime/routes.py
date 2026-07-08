@@ -3,15 +3,18 @@ from sqlalchemy import text, desc
 
 from flask import Blueprint, request, jsonify
 from .models import Target, Check, AlertChannel, db
+from .auth_routes import api_login_required
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
 @api.route("/targets", methods=["GET"])
+@api_login_required
 def list_targets():
     targets = Target.query.all()
     return jsonify([t.to_dict() for t in targets])
 
 @api.route("/targets", methods=["POST"])
+@api_login_required
 def create_target():
     data = request.get_json()
     if not data or not data.get("url"):
@@ -30,8 +33,9 @@ def create_target():
     return jsonify(target.to_dict()), 201
 
 @api.route("/targets/<int:target_id>", methods=["DELETE"])
+@api_login_required
 def delete_target(target_id):
-    target = Target.query.get_or_404(target_id)
+    target = db.get_or_404(Target, target_id)
     Check.query.filter_by(target_id=target.id).delete()
     db.session.delete(target)
     db.session.commit()
@@ -41,12 +45,14 @@ def delete_target(target_id):
 
 
 @api.route("/alert-channels", methods=["GET"])
+@api_login_required
 def list_alert_channels():
     channels = AlertChannel.query.all()
     return jsonify([c.to_dict() for c in channels])
 
 
 @api.route("/alert-channels", methods=["POST"])
+@api_login_required
 def create_alert_channel():
     data = request.get_json(silent=True)
     if not data:
@@ -78,8 +84,9 @@ def create_alert_channel():
 
 
 @api.route("/alert-channels/<int:channel_id>", methods=["PUT"])
+@api_login_required
 def update_alert_channel(channel_id):
-    channel = AlertChannel.query.get_or_404(channel_id)
+    channel = db.get_or_404(AlertChannel, channel_id)
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "JSON body required"}), 400
@@ -105,16 +112,18 @@ def update_alert_channel(channel_id):
 
 
 @api.route("/alert-channels/<int:channel_id>", methods=["DELETE"])
+@api_login_required
 def delete_alert_channel(channel_id):
-    channel = AlertChannel.query.get_or_404(channel_id)
+    channel = db.get_or_404(AlertChannel, channel_id)
     db.session.delete(channel)
     db.session.commit()
     return jsonify({"message": "deleted"})
 
 
 @api.route("/alert-channels/<int:channel_id>/toggle", methods=["PATCH"])
+@api_login_required
 def toggle_alert_channel(channel_id):
-    channel = AlertChannel.query.get_or_404(channel_id)
+    channel = db.get_or_404(AlertChannel, channel_id)
     channel.is_active = not channel.is_active
     db.session.commit()
     return jsonify(channel.to_dict())
@@ -124,6 +133,7 @@ def toggle_alert_channel(channel_id):
 
 
 @api.route("/status", methods=["GET"])
+@api_login_required
 def get_status():
     targets = Target.query.filter_by(is_active=True).all()
     result = []
@@ -134,6 +144,7 @@ def get_status():
     return jsonify(result)
 
 @api.route("/history/<int:target_id>", methods=["GET"])
+@api_login_required
 def get_history(target_id):
     limit = request.args.get("limit", 20, type=int)
     checks = Check.query.filter_by(target_id=target_id).limit(limit).all()
@@ -141,6 +152,7 @@ def get_history(target_id):
 
 
 @api.route("/report/<int:target_id>")
+@api_login_required
 def get_report(target_id):
     """Aggregate report from hourly_checks. Uptime = SUM(up) / SUM(total)."""
     days = min(request.args.get("days", 30, type=int), 90)
@@ -181,6 +193,7 @@ def get_report(target_id):
 
 
 @api.route("/report/<int:target_id>/timeline")
+@api_login_required
 def get_timeline(target_id):
     """Per-bucket timeline from hourly_checks."""
     days = min(request.args.get("days", 7, type=int), 90)

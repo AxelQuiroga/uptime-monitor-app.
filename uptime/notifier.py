@@ -7,6 +7,8 @@ Alert dispatcher — called by checker when a target changes state.
 import requests
 import logging
 
+logging.basicConfig(level=logging.INFO, format="%(name)s %(levelname)s %(message)s")
+
 from .notifiers import dispatch
 from .models import Target, Check
 

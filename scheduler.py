@@ -12,9 +12,20 @@ from uptime.queue import check_queue
 
 POLL_INTERVAL = 15
 
+_app = None
+
+
+def _get_app():
+    """Lazy singleton: create Flask app once, reuse for all poll cycles."""
+    global _app
+    if _app is None:
+        _app = create_app()
+    return _app
+
+
 def get_due_targets():
     """Return active targets whose next check is overdue."""
-    app = create_app()
+    app = _get_app()
     with app.app_context():
         now = datetime.now(timezone.utc)
         targets = Target.query.filter_by(is_active=True).all()

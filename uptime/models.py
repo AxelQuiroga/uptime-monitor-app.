@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from flask_login import UserMixin
 from .database import db
 
 class Target(db.Model):
@@ -47,13 +48,23 @@ class AlertChannel(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "target_id": self.target_id,
             "type": self.type,
             "value": self.value,
             "name": self.name,
-            "target_id": self.target_id,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class AdminUser(UserMixin):
+    """Single admin user backed by env config, not a database table.
+
+    Flask-Login requires a User class with is_authenticated, is_active,
+    is_anonymous, and get_id — UserMixin provides all of them.
+    """
+    def get_id(self):
+        return "admin"
 
 
 class Check(db.Model):

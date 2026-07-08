@@ -3,21 +3,24 @@
 .env.local
 .env.production
 
+# --- Git ---
+.git/
+.gitignore
+.gitattributes
+
 # --- Python ---
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
 .venv/
-.python-version
-
-# --- Testing ---
+venv/
 .pytest_cache/
 .coverage
-coverage/
+.coverage.*
 htmlcov/
-*.coverage
+
+# --- Tests (not needed at runtime) ---
+tests/
 
 # --- IDE ---
 .vscode/
@@ -30,7 +33,13 @@ htmlcov/
 Thumbs.db
 
 # --- Docker ---
+docker-compose.yml
+Dockerfile
+.dockerignore
 uptime-pgdata/
 
 # --- Dead files ---
 runner.py
+
+# --- Documentation ---
+README.md
