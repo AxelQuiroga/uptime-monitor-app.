@@ -53,6 +53,34 @@ def run_migration():
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS alert_channels (
+            id SERIAL PRIMARY KEY,
+            type VARCHAR(20) NOT NULL,
+            value VARCHAR(500) NOT NULL,
+            name VARCHAR(100),
+            target_id INTEGER REFERENCES targets(id),
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+    """)
+    print("[migrate] alert_channels ready")
+
+    # Migrate legacy target.webhook_url → alert_channels (one-time)
+    cur.execute("""
+        INSERT INTO alert_channels (type, value, name, target_id, is_active)
+        SELECT 'slack', webhook_url, name || ' webhook', id, TRUE
+        FROM targets
+        WHERE webhook_url IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM alert_channels ac
+              WHERE ac.target_id = targets.id AND ac.type = 'slack'
+          );
+    """)
+    rows = cur.rowcount
+    if isinstance(rows, int) and rows > 0:
+        print(f"[migrate] Migrated {rows} legacy webhook(s) to alert_channels")
+
     print("[migrate] Tables ready")
 
     # 2.b Fix PK to include created_at (TimescaleDB requires partitioning col in PK)

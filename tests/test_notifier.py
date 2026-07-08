@@ -102,3 +102,91 @@ class TestSendAlert:
         send_alert(target_with_webhook, check, previous_up=True)
 
         assert len(responses.calls) == 1
+
+
+class TestDispatch:
+    """Tests for the AlertChannel dispatcher path."""
+
+    @responses.activate
+    def test_dispatch_slack(self, app, session, target):
+        """AlertChannel type=slack sends via webhook."""
+        responses.add(responses.POST, "https://hooks.slack.com/abc", status=200)
+
+        from uptime.models import AlertChannel
+        ch = AlertChannel(type="slack", value="https://hooks.slack.com/abc", name="Test")
+        session.add(ch)
+        session.commit()
+
+        check = _make_check(session, target, 500, is_up=False)
+        send_alert(target, check, previous_up=True)
+
+        assert len(responses.calls) == 1
+        call = responses.calls[0]
+        assert call.request.url == "https://hooks.slack.com/abc"
+        assert call.request.method == "POST"
+
+    @responses.activate
+    def test_dispatch_discord(self, app, session, target):
+        """AlertChannel type=discord sends via webhook."""
+        responses.add(responses.POST, "https://discord.com/api/webhooks/xyz", status=200)
+
+        from uptime.models import AlertChannel
+        ch = AlertChannel(type="discord", value="https://discord.com/api/webhooks/xyz")
+        session.add(ch)
+        session.commit()
+
+        check = _make_check(session, target, 500, is_up=False)
+        send_alert(target, check, previous_up=True)
+
+        assert len(responses.calls) == 1
+
+    @responses.activate
+    def test_dispatch_global_and_scoped(self, app, session, target):
+        """Both global + per-target channels receive the alert."""
+        responses.add(responses.POST, "https://hooks.global.com/", status=200)
+        responses.add(responses.POST, "https://hooks.scoped.com/", status=200)
+
+        from uptime.models import AlertChannel
+        global_ch = AlertChannel(type="slack", value="https://hooks.global.com/", name="Global")
+        scoped_ch = AlertChannel(type="slack", value="https://hooks.scoped.com/", target_id=target.id, name="Scoped")
+        session.add_all([global_ch, scoped_ch])
+        session.commit()
+
+        check = _make_check(session, target, 500, is_up=False)
+        send_alert(target, check, previous_up=True)
+
+        assert len(responses.calls) == 2
+
+    @responses.activate
+    def test_dispatch_inactive_channels_ignored(self, app, session, target):
+        """Inactive channels are NOT notified."""
+        responses.add(responses.POST, "https://hooks.active.com/", status=200)
+
+        from uptime.models import AlertChannel
+        active = AlertChannel(type="slack", value="https://hooks.active.com/", is_active=True)
+        inactive = AlertChannel(type="slack", value="https://hooks.inactive.com/", is_active=False)
+        session.add_all([active, inactive])
+        session.commit()
+
+        check = _make_check(session, target, 500, is_up=False)
+        send_alert(target, check, previous_up=True)
+
+        assert len(responses.calls) == 1
+        assert responses.calls[0].request.url == "https://hooks.active.com/"
+
+    @responses.activate
+    def test_dispatch_legacy_plus_channels(self, app, session, target_with_webhook):
+        """Both legacy webhook + AlertChannel dispatch fire."""
+        # Legacy webhook response + AlertChannel response
+        responses.add(responses.POST, "https://hooks.example.com/alert", status=200)
+        responses.add(responses.POST, "https://hooks.newchannel.com/", status=200)
+
+        from uptime.models import AlertChannel
+        ch = AlertChannel(type="slack", value="https://hooks.newchannel.com/")
+        session.add(ch)
+        session.commit()
+
+        check = _make_check(session, target_with_webhook, 500, is_up=False)
+        send_alert(target_with_webhook, check, previous_up=True)
+
+        assert len(responses.calls) == 2

@@ -4,7 +4,7 @@ Serves:
   /        → Dashboard overview (manage targets + see status)
 """
 from flask import Blueprint, render_template
-from .models import Target, Check
+from .models import Target, Check, AlertChannel
 
 dashboard = Blueprint("dashboard", __name__)
 
@@ -36,10 +36,16 @@ def index():
     total = len(status_list)
     up_count = sum(1 for s in status_list if s["status"] == "up")
 
+    # Alert channels
+    channels = AlertChannel.query.all()
+    targets = Target.query.all()
+
     return render_template(
         "dashboard.html",
         status=status_list,
         total=total,
         up_count=up_count,
         down_count=total - up_count,
+        channels=[c.to_dict() for c in channels],
+        targets=[t.to_dict() for t in targets],
     )

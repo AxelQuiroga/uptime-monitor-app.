@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from uptime.models import Target, Check
+from uptime.models import Target, Check, AlertChannel
 
 
 class TestTargetRoutes:
@@ -248,4 +248,144 @@ class TestReportRoutes:
     def test_report_not_found(self, client):
         """GET /api/report/9999 returns 404."""
         resp = client.get("/api/report/9999")
+        assert resp.status_code == 404
+
+
+class TestAlertChannelRoutes:
+    """Tests for /api/alert-channels CRUD endpoints."""
+
+    def test_list_empty(self, client):
+        """GET /api/alert-channels returns empty list."""
+        resp = client.get("/api/alert-channels")
+        assert resp.status_code == 200
+        assert resp.json == []
+
+    def test_create_slack(self, client, session):
+        """POST with valid slack channel creates and returns 201."""
+        resp = client.post(
+            "/api/alert-channels",
+            json={"type": "slack", "value": "https://hooks.slack.com/abc", "name": "Team"},
+        )
+        assert resp.status_code == 201
+        data = resp.json
+        assert data["type"] == "slack"
+        assert data["value"] == "https://hooks.slack.com/abc"
+        assert data["name"] == "Team"
+        assert data["is_active"] is True
+        assert data["target_id"] is None
+
+    def test_create_discord(self, client):
+        """POST with valid discord channel."""
+        resp = client.post(
+            "/api/alert-channels", json={"type": "discord", "value": "https://discord.com/api/webhooks/x"}
+        )
+        assert resp.status_code == 201
+        assert resp.json["type"] == "discord"
+
+    def test_create_email(self, client):
+        """POST with valid email channel."""
+        resp = client.post(
+            "/api/alert-channels", json={"type": "email", "value": "ops@example.com"}
+        )
+        assert resp.status_code == 201
+        assert resp.json["type"] == "email"
+
+    def test_create_scoped_to_target(self, client, target):
+        """POST with target_id scopes the channel."""
+        resp = client.post(
+            "/api/alert-channels",
+            json={"type": "slack", "value": "https://hooks.slack.com/t", "target_id": target.id},
+        )
+        assert resp.status_code == 201
+        assert resp.json["target_id"] == target.id
+
+    def test_create_scoped_to_nonexistent_target(self, client):
+        """POST with invalid target_id returns 404."""
+        resp = client.post(
+            "/api/alert-channels",
+            json={"type": "slack", "value": "https://hooks.slack.com/t", "target_id": 999},
+        )
+        assert resp.status_code == 404
+
+    def test_create_invalid_type(self, client):
+        """POST with invalid type returns 400."""
+        resp = client.post(
+            "/api/alert-channels", json={"type": "pagerduty", "value": "https://hooks.example.com"}
+        )
+        assert resp.status_code == 400
+        assert "type must be" in resp.json["error"]
+
+    def test_create_missing_value(self, client):
+        """POST without value returns 400."""
+        resp = client.post("/api/alert-channels", json={"type": "slack"})
+        assert resp.status_code == 400
+        assert "value" in resp.json["error"]
+
+    def test_create_empty_body(self, client):
+        """POST with no body returns 400."""
+        resp = client.post("/api/alert-channels", data="", content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_list_after_create(self, client):
+        """GET returns created channels."""
+        client.post("/api/alert-channels", json={"type": "slack", "value": "https://hooks.slack.com/a"})
+        client.post("/api/alert-channels", json={"type": "discord", "value": "https://discord.com/w"})
+
+        resp = client.get("/api/alert-channels")
+        assert resp.status_code == 200
+        assert len(resp.json) == 2
+
+    def test_update_channel(self, client, session):
+        """PUT updates channel fields."""
+        ch = AlertChannel(type="slack", value="https://hooks.slack.com/old")
+        session.add(ch)
+        session.commit()
+
+        resp = client.put(
+            f"/api/alert-channels/{ch.id}",
+            json={"value": "https://hooks.slack.com/new", "name": "Updated", "is_active": False},
+        )
+        assert resp.status_code == 200
+        assert resp.json["value"] == "https://hooks.slack.com/new"
+        assert resp.json["name"] == "Updated"
+        assert resp.json["is_active"] is False
+
+    def test_update_not_found(self, client):
+        """PUT on non-existent id returns 404."""
+        resp = client.put("/api/alert-channels/999", json={"value": "https://hooks.example.com"})
+        assert resp.status_code == 404
+
+    def test_toggle_channel(self, client, session):
+        """PATCH toggle flips is_active."""
+        ch = AlertChannel(type="slack", value="https://hooks.slack.com/t")
+        session.add(ch)
+        session.commit()
+
+        assert ch.is_active is True
+
+        resp = client.patch(f"/api/alert-channels/{ch.id}/toggle")
+        assert resp.status_code == 200
+        assert resp.json["is_active"] is False
+
+        resp = client.patch(f"/api/alert-channels/{ch.id}/toggle")
+        assert resp.status_code == 200
+        assert resp.json["is_active"] is True
+
+    def test_delete_channel(self, client, session):
+        """DELETE removes the channel."""
+        ch = AlertChannel(type="slack", value="https://hooks.slack.com/del")
+        session.add(ch)
+        session.commit()
+
+        resp = client.delete(f"/api/alert-channels/{ch.id}")
+        assert resp.status_code == 200
+        assert resp.json["message"] == "deleted"
+
+        # Verify gone
+        resp = client.get("/api/alert-channels")
+        assert len(resp.json) == 0
+
+    def test_delete_not_found(self, client):
+        """DELETE on non-existent id returns 404."""
+        resp = client.delete("/api/alert-channels/999")
         assert resp.status_code == 404

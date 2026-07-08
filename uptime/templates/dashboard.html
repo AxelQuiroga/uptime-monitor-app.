@@ -278,6 +278,69 @@
             </div>
         </div>
 
+        <!-- ── Alert Channels ── -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2rem;margin-bottom:0.75rem;cursor:pointer" onclick="toggleAlerts()">
+            <h2 style="font-size:1rem;font-weight:600">Alert Channels</h2>
+            <span id="alertsToggle" style="color:var(--cyan);font-size:0.8rem">▼</span>
+        </div>
+
+        <div id="alertsSection" class="add-form" style="flex-direction:column;display:none">
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;width:100%">
+                <div class="field" style="min-width:100px">
+                    <label>Type</label>
+                    <select id="alertType">
+                        <option value="slack">Slack</option>
+                        <option value="discord">Discord</option>
+                        <option value="email">Email</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Webhook URL / Email</label>
+                    <input type="text" id="alertValue" placeholder="https://hooks.slack.com/... or email@..." />
+                </div>
+                <div class="field" style="min-width:120px">
+                    <label>Name (optional)</label>
+                    <input type="text" id="alertName" placeholder="Team Slack" />
+                </div>
+                <div class="field" style="min-width:120px">
+                    <label>Target (optional)</label>
+                    <select id="alertTarget">
+                        <option value="">-- All targets (global) --</option>
+                        {% for t in targets %}
+                        <option value="{{ t.id }}">{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button onclick="addAlertChannel()" style="margin-top:auto">+ Add</button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:0.5rem;width:100%;margin-top:0.5rem" id="alertList">
+                {% for ch in channels %}
+                <div class="alert-row" data-id="{{ ch.id }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;padding:0.6rem 0.75rem;background:var(--bg-input);border-radius:6px">
+                        <div style="display:flex;align-items:center;gap:0.75rem;flex:1;min-width:0">
+                            <span style="font-size:0.7rem;background:var(--bg-card);padding:0.15rem 0.45rem;border-radius:4px;color:var(--text-muted);text-transform:uppercase">{{ ch.type }}</span>
+                            <span style="font-size:0.85rem;color:var(--text-sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ch.value }}</span>
+                            {% if ch.name %}
+                            <span style="font-size:0.75rem;color:var(--text-muted)">{{ ch.name }}</span>
+                            {% endif %}
+                            {% if ch.target_id %}
+                            <span style="font-size:0.7rem;color:var(--cyan)">scoped</span>
+                            {% endif %}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0">
+                            <span style="font-size:0.8rem;color:var(--text-muted)">{{ "active" if ch.is_active else "muted" }}</span>
+                            <button class="toggle-btn" onclick="toggleAlert('{{ ch.id }}')" style="background:none;border:1px solid var(--border);color:{{ 'var(--green)' if ch.is_active else 'var(--text-muted)' }};padding:0.25rem 0.5rem;border-radius:4px;cursor:pointer;font-size:0.75rem">Toggle</button>
+                            <button class="delete-btn" onclick="deleteAlert('{{ ch.id }}')">Remove</button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div style="text-align:center;color:var(--text-muted);font-size:0.85rem;padding:1rem 0" id="alertEmpty">No alert channels configured.</div>
+                {% endfor %}
+            </div>
+        </div>
+
         <div id="toast" class="toast"></div>
     </div>
 
@@ -451,6 +514,57 @@
             const resp = await fetch('/api/targets/' + id, { method: 'DELETE' });
             if (resp.ok) {
                 showToast('Target deleted');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                showToast('Error deleting', true);
+            }
+        }
+
+        // ── Alert Channels ──
+        function toggleAlerts() {
+            const section = document.getElementById('alertsSection');
+            const toggle = document.getElementById('alertsToggle');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+            toggle.textContent = section.style.display === 'none' ? '▶' : '▼';
+        }
+        {% if channels %}document.getElementById('alertsSection').style.display = 'block';{% endif %}
+
+        async function addAlertChannel() {
+            const type = document.getElementById('alertType').value;
+            const value = document.getElementById('alertValue').value.trim();
+            const name = document.getElementById('alertName').value.trim();
+            const targetId = document.getElementById('alertTarget').value;
+            if (!value) { showToast('Webhook URL or email is required', true); return; }
+            const body = { type, value };
+            if (name) body.name = name;
+            if (targetId) body.target_id = parseInt(targetId);
+            const resp = await fetch('/api/alert-channels', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (resp.ok) {
+                showToast('Alert channel added!');
+                setTimeout(() => location.reload(), 800);
+            } else {
+                const data = await resp.json();
+                showToast(data.error || 'Error', true);
+            }
+        }
+
+        async function toggleAlert(id) {
+            const resp = await fetch('/api/alert-channels/' + id + '/toggle', { method: 'PATCH' });
+            if (resp.ok) {
+                setTimeout(() => location.reload(), 200);
+            } else {
+                showToast('Error toggling channel', true);
+            }
+        }
+
+        async function deleteAlert(id) {
+            if (!confirm('Delete this alert channel?')) return;
+            const resp = await fetch('/api/alert-channels/' + id, { method: 'DELETE' });
+            if (resp.ok) {
+                showToast('Alert channel deleted');
                 setTimeout(() => location.reload(), 800);
             } else {
                 showToast('Error deleting', true);

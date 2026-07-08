@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import text, desc
 
 from flask import Blueprint, request, jsonify
-from .models import Target, Check, db
+from .models import Target, Check, AlertChannel, db
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
@@ -36,6 +36,92 @@ def delete_target(target_id):
     db.session.delete(target)
     db.session.commit()
     return jsonify({"message": "deleted"})
+
+# ─── AlertChannels CRUD ───────────────────────────────────────────────────
+
+
+@api.route("/alert-channels", methods=["GET"])
+def list_alert_channels():
+    channels = AlertChannel.query.all()
+    return jsonify([c.to_dict() for c in channels])
+
+
+@api.route("/alert-channels", methods=["POST"])
+def create_alert_channel():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    ch_type = data.get("type")
+    if ch_type not in ("slack", "discord", "email"):
+        return jsonify({"error": "type must be slack, discord, or email"}), 400
+    if not data.get("value"):
+        return jsonify({"error": "value (webhook URL or email) is required"}), 400
+
+    # Validate target_id if provided
+    target_id = data.get("target_id")
+    if target_id is not None:
+        target = Target.query.get(target_id)
+        if not target:
+            return jsonify({"error": "target not found"}), 404
+
+    channel = AlertChannel(
+        type=ch_type,
+        value=data["value"],
+        name=data.get("name", ""),
+        target_id=target_id,
+        is_active=data.get("is_active", True),
+    )
+    db.session.add(channel)
+    db.session.commit()
+    return jsonify(channel.to_dict()), 201
+
+
+@api.route("/alert-channels/<int:channel_id>", methods=["PUT"])
+def update_alert_channel(channel_id):
+    channel = AlertChannel.query.get_or_404(channel_id)
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    if "type" in data:
+        if data["type"] not in ("slack", "discord", "email"):
+            return jsonify({"error": "type must be slack, discord, or email"}), 400
+        channel.type = data["type"]
+    if "value" in data:
+        channel.value = data["value"]
+    if "name" in data:
+        channel.name = data["name"]
+    if "target_id" in data:
+        if data["target_id"] is not None:
+            if not Target.query.get(data["target_id"]):
+                return jsonify({"error": "target not found"}), 404
+        channel.target_id = data["target_id"]
+    if "is_active" in data:
+        channel.is_active = data["is_active"]
+
+    db.session.commit()
+    return jsonify(channel.to_dict())
+
+
+@api.route("/alert-channels/<int:channel_id>", methods=["DELETE"])
+def delete_alert_channel(channel_id):
+    channel = AlertChannel.query.get_or_404(channel_id)
+    db.session.delete(channel)
+    db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
+@api.route("/alert-channels/<int:channel_id>/toggle", methods=["PATCH"])
+def toggle_alert_channel(channel_id):
+    channel = AlertChannel.query.get_or_404(channel_id)
+    channel.is_active = not channel.is_active
+    db.session.commit()
+    return jsonify(channel.to_dict())
+
+
+# ───────────────────────────────────────────────────────────────────────────
+
 
 @api.route("/status", methods=["GET"])
 def get_status():
