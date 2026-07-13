@@ -20,6 +20,8 @@ htmlcov/
 *.coverage
 
 # --- IDE ---
+.opencode/
+.opencode/
 .vscode/
 .idea/
 *.swp

@@ -1,23 +1,53 @@
 name: CI Pipeline
+
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: uptime_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/uptime_test
+      SECRET_KEY: ci-test-secret-key-do-not-use
+      ADMIN_PASSWORD: ci-test-password
+      FLASK_DEBUG: 0
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Install deps
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Verify imports
-        run: python -c "from uptime.app import create_app; print('OK')"
-      - name: Build Docker
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Verify Docker build
         run: docker build -t uptime-monitor .
